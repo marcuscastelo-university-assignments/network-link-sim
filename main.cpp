@@ -2,18 +2,42 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <unordered_map>
+#include <string.h>
 
-struct Data
+#include "types.hpp"
+#include "crc_32.hpp"
+
+struct Ether2Frame
 {
-    unsigned int src : 4;
-    unsigned int dst : 4;
-};
+    unsigned int dst : 6;
+    unsigned int src : 6;
+    unsigned int type : 2;
+    char *data;
+    unsigned int CRC;
 
-using MAC_PARTS = unsigned char[6];
+    Ether2Frame(MAC &dst, MAC &src, const char *const data, unsigned int data_size)
+        : dst(dst.to_bytes()), src(src.to_bytes())
+    {
+        this->data = (char*) malloc(sizeof(char) * data_size);
+        memcpy(this->data, data, data_size);
+        CRC = CRC32(data, data_size);
+    }
+};
 
 struct MAC
 {
     MAC_PARTS parts;
+
+    unsigned int to_bytes()
+    {
+        unsigned int bytes = 0;
+        for (int i = 0; i < 6; i++)
+        {
+            bytes |= parts[i];
+            bytes <<= 8;
+        }
+    }
 
     std::string to_string()
     {
@@ -41,6 +65,15 @@ struct MAC
         for (int i = 0; i < 6; i++)
             this->parts[i] = parts[i];
     }
+
+    MAC(unsigned int bytes)
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            parts[i] = bytes & 0xFF;
+            bytes >>= 8;
+        }
+    }
 };
 
 class DataReceiver
@@ -50,21 +83,29 @@ class DataReceiver
 
 class PC : public DataReceiver
 {
+    MAC mac;
+    DataReceiver *port;
 
 public:
-    DataReceiver *port;
     virtual void sendMessage(Data &data) override
     {
-        if (data.dst != this->MAC)
+        if (data.dst != this->mac)
             return;
     }
 };
 
 class Switch : public DataReceiver
 {
+private:
+    std::unordered_map<MAC, unsigned int> m_CAMTable;
+    // std::unordered_map<IP, MAC> m_ARPTable;
 public:
     DataReceiver *ports[32];
     virtual void sendMessage(Data &data) override
+    {
+    }
+
+    Switch()
     {
     }
 };
