@@ -157,10 +157,10 @@ public:
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < ports.size(); i++)
             if (ports[i] != nullptr)
-                ports[i]->receiveFrame(frame);
+                ports[i]->receiveFrame(this, frame);
     }
 
-    virtual void receiveFrame(Ether2Frame &frame) = 0;
+    virtual void receiveFrame(const EthernetPeer* const sender_ptr, Ether2Frame &frame) = 0;
     // virtual void onConnected(unsigned port) = 0;
     // virtual void onDisconnected(unsigned port) = 0;
     virtual ~EthernetPeer() {}
@@ -170,7 +170,7 @@ class Host : public EthernetPeer
 {
 public:
     MAC m_MAC;
-    virtual void receiveFrame(Ether2Frame &frame) override
+    virtual void receiveFrame(const EthernetPeer* const sender_ptr, Ether2Frame &frame) override
     {
         std::cout << "CurrentMAC: " << m_MAC.to_string() << std::endl;
         // std::cout << "CurrentMAC (bytes): " << m_MAC.to_bytes() << std::endl;
@@ -199,14 +199,14 @@ private:
     std::unordered_map<MAC, unsigned int> m_CAMTable;
     // std::unordered_map<IP, MAC> m_ARPTable;
 public:
-    virtual void receiveFrame(Ether2Frame &frame) override
+    virtual void receiveFrame(const EthernetPeer* const sender_ptr, Ether2Frame &frame) override
     {
+        std::cout << "Switch received, repassing" << std::endl << std::endl;
+
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < ports.size(); i++)
-            if (ports[i] != nullptr)
-                ports[i]->receiveFrame(frame);
-
-        //TODO: do not send to the same port which sent the frame originally
+            if (ports[i] != nullptr && ports[i].get() != sender_ptr)
+                ports[i]->receiveFrame(this, frame);
     }
 
     Switch(unsigned int port_count = 32) : EthernetPeer(port_count) {}
@@ -226,11 +226,13 @@ int main(int argc, char const *argv[])
     std::cout << std::endl << std::endl;
 
     //Create a switch with 2 ports
-    Ref<Switch> S = std::make_shared<Switch>(2);
+    Ref<Switch> S1 = std::make_shared<Switch>(2);
+    Ref<Switch> S2 = std::make_shared<Switch>(2);
 
-    //Connect A and B through switch
-    EthernetPeer::connect(A, S, 0, 0);
-    EthernetPeer::connect(B, S, 0, 1);
+    //Connect A and B through switches
+    EthernetPeer::connect(A, S1, 0, 0);
+    EthernetPeer::connect(S1, S2, 1, 1);
+    EthernetPeer::connect(B, S2, 0, 0);
     
     //TODO: change to a function
 
