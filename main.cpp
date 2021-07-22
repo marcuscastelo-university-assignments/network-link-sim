@@ -68,7 +68,7 @@ struct MAC
 
     MAC(const MAC &other)
     {
-        memcpy(parts, other.parts, 6);
+        memcpy(parts, other.parts, 6 * sizeof(uint16_t));
     }
 };
 
@@ -216,7 +216,7 @@ int main(int argc, char const *argv[])
 {
     //Create two computers with a random MAC address
     Ref<Host> A = std::make_shared<Host>(MAC("00:00:00:00:00:00"));
-    Ref<Host> B = std::make_shared<Host>(MAC("10:00:00:00:00:00"));
+    Ref<Host> B = std::make_shared<Host>(MAC("FF:FF:FF:FF:FF:FF"));
 
     //Print A and B MAC addressess in string and byte form
     std::cout << "A: " << A->m_MAC.to_string() << std::endl;
