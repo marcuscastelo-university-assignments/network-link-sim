@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <unistd.h>
 
 #include "types.hpp"
 #include "crc_32.hpp"
@@ -14,19 +15,17 @@
 template <typename T>
 using Ref = std::shared_ptr<T>;
 
-
-
 struct MAC
 {
     MAC_PARTS parts;
 
-    unsigned int to_bytes() const
+    uint64_t to_bytes() const
     {
-        unsigned int bytes = 0;
+        uint64_t bytes = 0;
         for (int i = 0; i < 6; i++)
         {
-            bytes |= parts[i];
             bytes <<= 8;
+            bytes |= parts[i];
         }
         return bytes;
     }
@@ -35,12 +34,12 @@ struct MAC
     {
         std::stringstream ss;
         ss << std::hex << std::setfill('0')
-           << std::setw(2) << (int)parts[0] << ":"
-           << std::setw(2) << (int)parts[1] << ":"
-           << std::setw(2) << (int)parts[2] << ":"
-           << std::setw(2) << (int)parts[3] << ":"
-           << std::setw(2) << (int)parts[4] << ":"
-           << std::setw(2) << (int)parts[5];
+           << std::setw(2) << (uint64_t)parts[0] << ":"
+           << std::setw(2) << (uint64_t)parts[1] << ":"
+           << std::setw(2) << (uint64_t)parts[2] << ":"
+           << std::setw(2) << (uint64_t)parts[3] << ":"
+           << std::setw(2) << (uint64_t)parts[4] << ":"
+           << std::setw(2) << (uint64_t)parts[5];
         return ss.str();
     }
 
@@ -58,9 +57,9 @@ struct MAC
             this->parts[i] = parts[i];
     }
 
-    MAC(unsigned int bytes)
+    MAC(uint64_t bytes)
     {
-        for (int i = 0; i < 6; i++)
+        for (int i = 5; i >= 0; i--)
         {
             parts[i] = bytes & 0xFF;
             bytes >>= 8;
@@ -75,16 +74,17 @@ struct MAC
 
 struct Ether2Frame
 {
-    unsigned int dst : 6;
-    unsigned int src : 6;
-    unsigned int type : 2;
-    char *data;
-    unsigned int CRC;
+    uint64_t 
+        dst : 48,
+        src : 48,
+        type : 16;
+
+    uint8_t data[1500];
+    uint32_t CRC;
 
     Ether2Frame(const MAC &dst, const MAC &src, const char *const data, unsigned int data_size)
         : dst(dst.to_bytes()), src(src.to_bytes())
     {
-        this->data = (char *)malloc(sizeof(char) * data_size);
         memcpy(this->data, data, data_size);
         CRC = CRC32(data, data_size);
     }
@@ -173,10 +173,13 @@ public:
     virtual void receiveFrame(Ether2Frame &frame) override
     {
         std::cout << "CurrentMAC: " << m_MAC.to_string() << std::endl;
+        // std::cout << "CurrentMAC (bytes): " << m_MAC.to_bytes() << std::endl;
 
         //Announce that this host has received the frame
         std::cout << "Received frame from " << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
         std::cout << "Frame destination: " << MAC(frame.dst).to_string() << std::endl;
+        // std::cout << "Frame destination (bytes): " << frame.dst << std::endl;
+        // std::cout << "Frame destination (bytes conv): " << MAC(frame.dst).to_bytes() << std::endl;
 
         //If the destination is not this host, drop the frame and return
         if (frame.dst != this->m_MAC.to_bytes()) {
@@ -198,14 +201,12 @@ private:
 public:
     virtual void receiveFrame(Ether2Frame &frame) override
     {
-        //Send frame to all peers in m_CAMTable except the one who originally sent the frame
-        for (auto it = m_CAMTable.begin(); it != m_CAMTable.end(); it++)
-        {
-            if (it->first.to_bytes() == frame.src)
-                continue;
+        //Send frame to all ports with a valid peer
+        for (unsigned int i = 0; i < ports.size(); i++)
+            if (ports[i] != nullptr)
+                ports[i]->receiveFrame(frame);
 
-            this->ports[it->second]->receiveFrame(frame);
-        }
+        //TODO: do not send to the same port which sent the frame originally
     }
 
     Switch(unsigned int port_count = 32) : EthernetPeer(port_count) {}
@@ -214,8 +215,15 @@ public:
 int main(int argc, char const *argv[])
 {
     //Create two computers with a random MAC address
-    Ref<Host> A = std::make_shared<Host>(MAC(rand()));
-    Ref<Host> B = std::make_shared<Host>(MAC(rand()));
+    Ref<Host> A = std::make_shared<Host>(MAC("00:00:00:00:00:00"));
+    Ref<Host> B = std::make_shared<Host>(MAC("10:00:00:00:00:00"));
+
+    //Print A and B MAC addressess in string and byte form
+    std::cout << "A: " << A->m_MAC.to_string() << std::endl;
+    std::cout << "A (bytes): " << A->m_MAC.to_bytes() << std::endl;
+    std::cout << "B: " << B->m_MAC.to_string() << std::endl;
+    std::cout << "B (bytes): " << B->m_MAC.to_bytes() << std::endl;
+    std::cout << std::endl << std::endl;
 
     //Create a switch with 2 ports
     Ref<Switch> S = std::make_shared<Switch>(2);
@@ -227,7 +235,7 @@ int main(int argc, char const *argv[])
     //TODO: change to a function
 
     //Create a frame from A to B with the message "Hello World"
-    Ether2Frame frame(A->m_MAC.to_bytes(), B->m_MAC.to_bytes(), "Hello world!", 13);
+    Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello world!", 13);
     
     //Send the frame
     A->sendFrame(frame);

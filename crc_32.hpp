@@ -8,4 +8,5 @@ int CRC32(const char* data, unsigned int size) {
     //TODO: xor com data
     
     //Return resto para colocar no quadro como checksum.
+    return 0;
 }
