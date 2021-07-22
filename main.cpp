@@ -8,6 +8,9 @@
 #include <memory>
 #include <iostream>
 #include <unistd.h>
+#include <chrono>
+
+using namespace std::chrono_literals;
 
 #include "types.hpp"
 #include "crc_32.hpp"
@@ -24,7 +27,7 @@ struct MAC
         uint64_t bytes = 0;
         for (int i = 0; i < 6; i++)
         {
-            bytes <<= 8;
+            bytes = bytes << 8;
             bytes |= parts[i];
         }
         return bytes;
@@ -72,13 +75,24 @@ struct MAC
     }
 };
 
+template <>
+struct std::hash<MAC>
+{
+    size_t operator()(const MAC &mac) const
+    {
+        return std::hash<uint64_t>()(mac.to_bytes());
+    }
+};
+
+
 struct Ether2Frame
 {
-    uint64_t 
+    uint64_t
         dst : 48,
         src : 48,
         type : 16;
 
+    //TODO: comentar uso de 1500 bytes (limitado pela linguagem (alternativa é usar a heap, mas perde fidedignidade))
     uint8_t data[1500];
     uint32_t CRC;
 
@@ -90,14 +104,6 @@ struct Ether2Frame
     }
 };
 
-template<>
-struct std::hash<MAC>
-{
-    size_t operator()(const MAC &mac) const
-    {
-        return std::hash<unsigned int>()(mac.to_bytes());
-    }
-};
 
 class EthernetPeer
 {
@@ -153,14 +159,15 @@ public:
         B->ports[portB] = nullptr;
     }
 
-    virtual void sendFrame(Ether2Frame &frame) {
+    virtual void sendFrame(Ether2Frame &frame)
+    {
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < ports.size(); i++)
             if (ports[i] != nullptr)
                 ports[i]->receiveFrame(this, frame);
     }
 
-    virtual void receiveFrame(const EthernetPeer* const sender_ptr, Ether2Frame &frame) = 0;
+    virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) = 0;
     // virtual void onConnected(unsigned port) = 0;
     // virtual void onDisconnected(unsigned port) = 0;
     virtual ~EthernetPeer() {}
@@ -170,7 +177,7 @@ class Host : public EthernetPeer
 {
 public:
     MAC m_MAC;
-    virtual void receiveFrame(const EthernetPeer* const sender_ptr, Ether2Frame &frame) override
+    virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
         std::cout << "CurrentMAC: " << m_MAC.to_string() << std::endl;
         // std::cout << "CurrentMAC (bytes): " << m_MAC.to_bytes() << std::endl;
@@ -182,31 +189,89 @@ public:
         // std::cout << "Frame destination (bytes conv): " << MAC(frame.dst).to_bytes() << std::endl;
 
         //If the destination is not this host, drop the frame and return
-        if (frame.dst != this->m_MAC.to_bytes()) {
+        if (frame.dst != this->m_MAC.to_bytes())
+        {
             std::cout << "Dropping frame" << std::endl;
             return;
         }
-        
+
         std::cout << "Accepting frame" << std::endl;
     }
 
     Host(const MAC &mac, unsigned int port_count = 1) : EthernetPeer(port_count), m_MAC(mac) {}
 };
 
+struct SwitchTableEntry {
+    uint16_t interface;
+    uint64_t lastUpdate;
+};
+
+const auto TTL = std::chrono::duration_cast<std::chrono::milliseconds>(10s).count();
+
+using SwitchTable = std::unordered_map<MAC, SwitchTableEntry>;
+
 class Switch : public EthernetPeer
 {
 private:
-    std::unordered_map<MAC, unsigned int> m_CAMTable;
-    // std::unordered_map<IP, MAC> m_ARPTable;
-public:
-    virtual void receiveFrame(const EthernetPeer* const sender_ptr, Ether2Frame &frame) override
+    const uint8_t MAX_TABLE_SIZE = 4;
+    
+    SwitchTable m_SwitchTable;
+
+    void sendToAllExceptSender(const EthernetPeer *const sender_ptr, Ether2Frame &frame)
     {
-        std::cout << "Switch received, repassing" << std::endl << std::endl;
+        std::cout << "Switch received, repassing" << std::endl
+                  << std::endl;
+
+        int senderInterface = getSenderInterface(sender_ptr);
 
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < ports.size(); i++)
-            if (ports[i] != nullptr && ports[i].get() != sender_ptr)
+            if (ports[i] != nullptr && i != senderInterface)
                 ports[i]->receiveFrame(this, frame);
+    }
+
+    int getSenderInterface(const EthernetPeer *const sender_ptr)
+    {
+        //Gets the port index which matches with sender_ptr
+        for (unsigned int i = 0; i < ports.size(); i++)
+            if (ports[i] != nullptr && ports[i].get() == sender_ptr)
+                return i;
+
+        return -1;
+    }
+
+public:
+    virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
+    {
+        int senderInterface = getSenderInterface(sender_ptr);
+
+        //If not connected to sender, throw an exception
+        if (senderInterface < 0)
+            throw std::runtime_error("Switch is not connected to sender");
+
+        //Get current time in milliseconds
+        uint64_t currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+
+        
+        //If sender not in switch table
+        if (m_SwitchTable.find(MAC(frame.src)) == m_SwitchTable.end()) {
+            m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
+        } else {
+            // Check if table entry's TTL has expired
+            if (currentTime - m_SwitchTable[frame.src].lastUpdate > TTL) {
+                m_SwitchTable.erase(frame.src);
+                m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
+            }
+        }
+
+        //If dest not in table or table is full:
+        if (m_SwitchTable.find(MAC(frame.dst)) == m_SwitchTable.end() || m_SwitchTable.size() == MAX_TABLE_SIZE) {
+            sendToAllExceptSender(sender_ptr, frame);
+        }
+        else {
+            //TODO: implement table
+        }
     }
 
     Switch(unsigned int port_count = 32) : EthernetPeer(port_count) {}
@@ -223,7 +288,8 @@ int main(int argc, char const *argv[])
     std::cout << "A (bytes): " << A->m_MAC.to_bytes() << std::endl;
     std::cout << "B: " << B->m_MAC.to_string() << std::endl;
     std::cout << "B (bytes): " << B->m_MAC.to_bytes() << std::endl;
-    std::cout << std::endl << std::endl;
+    std::cout << std::endl
+              << std::endl;
 
     //Create a switch with 2 ports
     Ref<Switch> S1 = std::make_shared<Switch>(2);
@@ -233,12 +299,12 @@ int main(int argc, char const *argv[])
     EthernetPeer::connect(A, S1, 0, 0);
     EthernetPeer::connect(S1, S2, 1, 1);
     EthernetPeer::connect(B, S2, 0, 0);
-    
+
     //TODO: change to a function
 
     //Create a frame from A to B with the message "Hello World"
     Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello world!", 13);
-    
+
     //Send the frame
     A->sendFrame(frame);
 
