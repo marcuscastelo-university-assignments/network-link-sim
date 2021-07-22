@@ -111,9 +111,13 @@ class EthernetPeer
 
 protected:
     std::vector<Ref<EthernetPeer>> interfaces;
+    ERROR_CONTROL m_ErrorControlType;
 
 public:
-    EthernetPeer(unsigned port_count) : interfaces(port_count) {}
+    EthernetPeer(ERROR_CONTROL error_control_type, unsigned port_count)
+        : interfaces(port_count), m_ErrorControlType(error_control_type)
+    {
+    }
 
     static void connect(const Ref<EthernetPeer> &A, const Ref<EthernetPeer> &B, unsigned portA, unsigned portB)
     {
@@ -128,8 +132,11 @@ public:
         else if (B->interfaces[portB] != A)
             throw std::runtime_error("In B, portB is already connected to a different peer");
 
-        //TODO: in case A and B are already connected, it will cause a reconnection (is this desirable?)
+        //Raise exception if both error checking methods are not the same
+        if (A->m_ErrorControlType != B->m_ErrorControlType)
+            throw std::runtime_error("Error control type of peers are different");
 
+        //TODO: in case A and B are already connected, it will cause a reconnection (is this desirable?)
         A->interfaces[portA] = B;
         B->interfaces[portB] = A;
     }
@@ -178,23 +185,30 @@ public:
     MAC m_MAC;
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
-        std::cout << "CurrentMAC: " << m_MAC.to_string() << std::endl;
 
         //Announce that this host has received the frame
-        std::cout << "Received frame from " << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
-        std::cout << "Frame destination: " << MAC(frame.dst).to_string() << std::endl;
+        L("(Host) Received frame from " << MAC(frame.src).to_string());
+        L("(Host) Frame destination: " << MAC(frame.dst).to_string());
 
+        L("(Host) CurrentMAC: " << m_MAC.to_string());
         //If the destination is not this host, drop the frame and return
-        if (!m_PromiscuousMode && frame.dst != this->m_MAC.to_bytes())
+        if (m_PromiscuousMode) { L("(Host) WARNING: Promiscuous mode enabled!!"); }
+        else if (frame.dst != this->m_MAC.to_bytes())
         {
-            std::cout << "Dropping frame" << std::endl;
+            L("The frame was not destinated to this host, dropping it");
             return;
         }
-
-        std::cout << "Accepting frame" << std::endl;
+        
+        L("Frame accepted!");
+        L("Frame content: " << frame.data);
     }
 
-    Host(const MAC &mac, unsigned int port_count = 1) : EthernetPeer(port_count), m_MAC(mac) {}
+    inline void setPromiscuousMode(bool promiscuous) { m_PromiscuousMode = promiscuous; }
+
+    Host(const MAC &mac, ERROR_CONTROL error_control_type, unsigned int port_count = 1)
+        : EthernetPeer(error_control_type, port_count), m_MAC(mac)
+    {
+    }
 };
 
 struct SwitchTableEntry
@@ -242,7 +256,7 @@ public:
         //Announce frame receival
         std::cout << "(SWITCH) Received frame from " << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
         std::cout << "(SWITCH) Frame destination: " << MAC(frame.dst).to_string() << std::endl;
-        
+
         size_t senderInterface = 0;
         try
         {
@@ -286,27 +300,26 @@ public:
         this->interfaces[findIt->second.interface]->sendFrame(frame);
     }
 
-    Switch(unsigned int port_count = 32) : EthernetPeer(port_count) {}
+    Switch(ERROR_CONTROL error_control_type, unsigned int port_count = 32)
+        : EthernetPeer(error_control_type, port_count)
+    {
+    }
 };
 
 int main(int argc, char const *argv[])
 {
-    //Create two computers with a random MAC address
-    Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"));
-    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"));
-    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"));
+    ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
 
-    //Print A and B MAC addressess in string and byte form
-    std::cout << "A: " << A->m_MAC.to_string() << std::endl;
-    std::cout << "A (bytes): " << A->m_MAC.to_bytes() << std::endl;
-    std::cout << "B: " << B->m_MAC.to_string() << std::endl;
-    std::cout << "B (bytes): " << B->m_MAC.to_bytes() << std::endl;
-    std::cout << std::endl
-              << std::endl;
+    //Create two computers with a random MAC address
+    Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
+    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), test_error_control);
+    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), test_error_control);
+
+    C->setPromiscuousMode(true);
 
     //Create a switch with 2 ports
-    Ref<Switch> S1 = std::make_shared<Switch>(2);
-    Ref<Switch> S2 = std::make_shared<Switch>(3);
+    Ref<Switch> S1 = std::make_shared<Switch>(test_error_control, 2);
+    Ref<Switch> S2 = std::make_shared<Switch>(test_error_control, 3);
 
     //Connect A and B through switches
     EthernetPeer::connect(A, S1, 0, 1);

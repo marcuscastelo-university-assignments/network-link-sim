@@ -10,3 +10,5 @@ int CRC32(const char* data, unsigned int size) {
     //Return resto para colocar no quadro como checksum.
     return 0;
 }
+
+//TODO: function to check if CRC is correct in received message
