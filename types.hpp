@@ -7,3 +7,9 @@ class PC;
 class Switch;
 
 using MAC_PARTS = uint16_t[6];
+
+enum class ERROR_CONTROL {
+    EVEN, 
+    ODD,
+    CRC
+};
