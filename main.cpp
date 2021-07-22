@@ -74,8 +74,7 @@ struct MAC
         memcpy(parts, other.parts, 6 * sizeof(uint16_t));
     }
 
-
-    bool operator==(const MAC& other) const { return to_bytes() == other.to_bytes(); }
+    bool operator==(const MAC &other) const { return to_bytes() == other.to_bytes(); }
 };
 
 template <>
@@ -106,7 +105,6 @@ struct Ether2Frame
     }
 };
 
-
 class EthernetPeer
 {
 
@@ -133,9 +131,6 @@ public:
 
         A->interfaces[portA] = B;
         B->interfaces[portB] = A;
-
-        // A->onConnected(portA);
-        // B->onConnected(portB);
     }
 
     static void disconnect(const Ref<EthernetPeer> &A, const Ref<EthernetPeer> &B)
@@ -170,8 +165,6 @@ public:
     }
 
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) = 0;
-    // virtual void onConnected(unsigned port) = 0;
-    // virtual void onDisconnected(unsigned port) = 0;
     virtual ~EthernetPeer() {}
 };
 
@@ -179,6 +172,7 @@ class Host : public EthernetPeer
 {
 private:
     bool m_PromiscuousMode = false;
+
 public:
     MAC m_MAC;
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
@@ -202,7 +196,8 @@ public:
     Host(const MAC &mac, unsigned int port_count = 1) : EthernetPeer(port_count), m_MAC(mac) {}
 };
 
-struct SwitchTableEntry {
+struct SwitchTableEntry
+{
     uint16_t interface;
     uint64_t lastUpdate;
 };
@@ -215,13 +210,13 @@ class Switch : public EthernetPeer
 {
 private:
     const uint8_t MAX_TABLE_SIZE = 4;
-    
+
     SwitchTable m_SwitchTable;
 
     void sendToAllExceptSender(uint16_t senderInterface, Ether2Frame &frame)
     {
-        std::cout << "Switch received, repassing" << std::endl
-                  << std::endl;
+        //Announce frame source and destination
+        std::cout << "(SWITCH) Sending frame to all interfaces except " << senderInterface << std::endl;
 
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < interfaces.size(); i++)
@@ -243,41 +238,51 @@ private:
 public:
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
-        size_t senderInterface = getSenderInterface(sender_ptr);
-
-        //If not connected to sender, throw an exception
-        if (senderInterface < 0)
-            throw std::runtime_error("Switch is not connected to sender");
+        //Announce frame receival
+        std::cout << "(SWITCH) Received frame from " << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
+        std::cout << "(SWITCH) Frame destination: " << MAC(frame.dst).to_string() << std::endl;
+        
+        size_t senderInterface = 0;
+        try
+        {
+            size_t senderInterface = getSenderInterface(sender_ptr);
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << e.what() << '\n';
+            return;
+        }
 
         //Get current time in milliseconds
         uint64_t currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        
-        //If sender not in switch table
-        if (m_SwitchTable.find(MAC(frame.src)) == m_SwitchTable.end()) {
-            m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
-        } else {
-            // Check if table entry's TTL has expired
-            if (currentTime - m_SwitchTable[frame.src].lastUpdate > TTL) {
-                m_SwitchTable.erase(frame.src);
-                m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
-            }
-        }
 
-        
+        //TODO: check what should happen if the same MAC is presented in another interface before TTL expires
+        //If sender not in switch table, add it, else update TTL and interface for MAC
+        m_SwitchTable[MAC(frame.src)] = {(uint16_t)senderInterface, currentTime};
+
         auto findIt = m_SwitchTable.find(MAC(frame.dst));
-        //If dest not in table or table is full:
-        if (findIt == m_SwitchTable.end() || m_SwitchTable.size() == MAX_TABLE_SIZE) {
-            sendToAllExceptSender(senderInterface, frame);
-        }
-        else {
-            this->interfaces[findIt->second.interface]->sendFrame(frame);
 
-            if (currentTime - findIt->second.lastUpdate > TTL) {
-                m_SwitchTable.erase(frame.src);
-                m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
-                sendToAllExceptSender(senderInterface, frame);
-            }
+        //If dest not in table or table is full, just send to all except sender
+        if (findIt == m_SwitchTable.end() || m_SwitchTable.size() == MAX_TABLE_SIZE)
+        {
+            D(L("(SWITCH) Destination not in table, sending to all except sender"));
+            sendToAllExceptSender(senderInterface, frame);
+            return;
         }
+
+        //If dest TTL expired, remove from switch table and send to all except sender
+        if (currentTime - findIt->second.lastUpdate > TTL)
+        {
+            D(L("(SWITCH) TTL expired, removing from table and sending to all except sender"));
+            m_SwitchTable.erase(frame.src);
+            m_SwitchTable[MAC(frame.src)] = {(uint16_t)senderInterface, currentTime};
+            sendToAllExceptSender(senderInterface, frame);
+            return;
+        }
+
+        //If it's all ok, just send to destination
+        D(L("(SWITCH) Sending to destination (it was in the switch table)"));
+        this->interfaces[findIt->second.interface]->sendFrame(frame);
     }
 
     Switch(unsigned int port_count = 32) : EthernetPeer(port_count) {}
