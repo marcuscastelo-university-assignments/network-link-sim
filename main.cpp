@@ -9,6 +9,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <chrono>
+#include "tui.hpp"
 
 using namespace std::chrono_literals;
 
@@ -245,7 +246,7 @@ public:
         size_t senderInterface = 0;
         try
         {
-            size_t senderInterface = getSenderInterface(sender_ptr);
+            senderInterface = getSenderInterface(sender_ptr);
         }
         catch (const std::exception &e)
         {
@@ -291,8 +292,9 @@ public:
 int main(int argc, char const *argv[])
 {
     //Create two computers with a random MAC address
-    Ref<Host> A = std::make_shared<Host>(MAC("00:00:00:00:00:00"));
-    Ref<Host> B = std::make_shared<Host>(MAC("FF:FF:FF:FF:FF:FF"));
+    Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"));
+    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"));
+    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"));
 
     //Print A and B MAC addressess in string and byte form
     std::cout << "A: " << A->m_MAC.to_string() << std::endl;
@@ -304,12 +306,13 @@ int main(int argc, char const *argv[])
 
     //Create a switch with 2 ports
     Ref<Switch> S1 = std::make_shared<Switch>(2);
-    Ref<Switch> S2 = std::make_shared<Switch>(2);
+    Ref<Switch> S2 = std::make_shared<Switch>(3);
 
     //Connect A and B through switches
-    EthernetPeer::connect(A, S1, 0, 0);
-    EthernetPeer::connect(S1, S2, 1, 1);
-    EthernetPeer::connect(B, S2, 0, 0);
+    EthernetPeer::connect(A, S1, 0, 1);
+    EthernetPeer::connect(S1, S2, 0, 0);
+    EthernetPeer::connect(B, S2, 0, 1);
+    EthernetPeer::connect(C, S2, 0, 2);
 
     //TODO: change to a function
 
