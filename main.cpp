@@ -9,9 +9,14 @@
 #include <iostream>
 #include <unistd.h>
 #include <chrono>
+#include <thread>
 #include "tui.hpp"
 
 using namespace std::chrono_literals;
+using namespace tui::text_literals;
+using namespace tui::text;
+
+using TT = tui::text::Text;
 
 #include "types.hpp"
 #include "crc_32.hpp"
@@ -185,22 +190,25 @@ public:
     MAC m_MAC;
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
-
+        L("");
         //Announce that this host has received the frame
-        L("(Host) Received frame from " << MAC(frame.src).to_string());
-        L("(Host) Frame destination: " << MAC(frame.dst).to_string());
+        L("(Host) Received frame from "_fblu << MAC(frame.src).to_string());
+        L("(Host) Frame destination: "_fblu << MAC(frame.dst).to_string());
 
-        L("(Host) CurrentMAC: " << m_MAC.to_string());
+        L("(Host) CurrentMAC: "_fblu << m_MAC.to_string());
         //If the destination is not this host, drop the frame and return
-        if (m_PromiscuousMode) { L("(Host) WARNING: Promiscuous mode enabled!!"); }
+        if (m_PromiscuousMode)
+        {
+            L("(Host) WARNING: Promiscuous mode enabled!!"_fyel);
+        }
         else if (frame.dst != this->m_MAC.to_bytes())
         {
-            L("The frame was not destinated to this host, dropping it");
+            L("The frame was not destinated to this host, dropping it"_fwhi);
             return;
         }
-        
-        L("Frame accepted!");
-        L("Frame content: " << frame.data);
+
+        L("(Host) Frame accepted!"_fgre);
+        L("(Host) Frame content: "_fgre << TT{(const char *)frame.data}.FWhite().Bold());
     }
 
     inline void setPromiscuousMode(bool promiscuous) { m_PromiscuousMode = promiscuous; }
@@ -231,7 +239,7 @@ private:
     void sendToAllExceptSender(uint16_t senderInterface, Ether2Frame &frame)
     {
         //Announce frame source and destination
-        std::cout << "(SWITCH) Sending frame to all interfaces except " << senderInterface << std::endl;
+        std::cout << "(SWITCH) Sending frame to all interfaces except "_fblu << senderInterface << std::endl;
 
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < interfaces.size(); i++)
@@ -253,9 +261,10 @@ private:
 public:
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
+        L("");
         //Announce frame receival
-        std::cout << "(SWITCH) Received frame from " << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
-        std::cout << "(SWITCH) Frame destination: " << MAC(frame.dst).to_string() << std::endl;
+        std::cout << "(SWITCH) Received frame from "_fblu << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
+        std::cout << "(SWITCH) Frame destination: "_fblu << MAC(frame.dst).to_string() << std::endl;
 
         size_t senderInterface = 0;
         try
@@ -280,7 +289,7 @@ public:
         //If dest not in table or table is full, just send to all except sender
         if (findIt == m_SwitchTable.end() || m_SwitchTable.size() == MAX_TABLE_SIZE)
         {
-            D(L("(SWITCH) Destination not in table, sending to all except sender"));
+            D(L("(SWITCH) Destination not in table, sending to all except sender"_fyel));
             sendToAllExceptSender(senderInterface, frame);
             return;
         }
@@ -288,7 +297,7 @@ public:
         //If dest TTL expired, remove from switch table and send to all except sender
         if (currentTime - findIt->second.lastUpdate > TTL)
         {
-            D(L("(SWITCH) TTL expired, removing from table and sending to all except sender"));
+            D(L("(SWITCH) TTL expired, removing from table and sending to all except sender"_fyel));
             m_SwitchTable.erase(frame.src);
             m_SwitchTable[MAC(frame.src)] = {(uint16_t)senderInterface, currentTime};
             sendToAllExceptSender(senderInterface, frame);
@@ -296,7 +305,7 @@ public:
         }
 
         //If it's all ok, just send to destination
-        D(L("(SWITCH) Sending to destination (it was in the switch table)"));
+        D(L("(SWITCH) Sending to destination (it was in the switch table)"_fgre));
         this->interfaces[findIt->second.interface]->sendFrame(frame);
     }
 
@@ -329,9 +338,31 @@ int main(int argc, char const *argv[])
 
     //TODO: change to a function
 
-    //Create a frame from A to B with the message "Hello World"
-    Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello world!", 13);
+    L("[MAIN] A sends 'Hello' to B"_fmag);
+    {
+        Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello", 6);
+        A->sendFrame(frame);
+    }
+    
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    L("[MAIN] B sends 'Oh, Hello!' to A"_fmag);
+    {
+        Ether2Frame frame(A->m_MAC, B->m_MAC, "Oh, Hello!", 11);
+        B->sendFrame(frame);
+    }
 
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    L("[MAIN] A sends 'BRB' to B"_fmag);
+    {
+        Ether2Frame frame(B->m_MAC, A->m_MAC, "BRB", 4);
+        A->sendFrame(frame);
+    }
+    
+    //Wait 20s
+    std::this_thread::sleep_for(std::chrono::seconds(20));
+
+    //Create a frame from A to B with the message "Hello World"
+    Ether2Frame frame(B->m_MAC, A->m_MAC, "I'm back!", 10);
     //Send the frame
     A->sendFrame(frame);
 
