@@ -1,3 +1,7 @@
+#define __nezumi_debugger_on__ 1
+#define D(x) { if (__nezumi_debugger_on__) { x } }
+#define L(x) { std::cout << x << std::endl; }
+
 struct MAC;
 struct Ether2Frame;
 struct Data;

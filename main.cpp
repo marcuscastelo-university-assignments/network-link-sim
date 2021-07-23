@@ -9,8 +9,14 @@
 #include <iostream>
 #include <unistd.h>
 #include <chrono>
+#include <thread>
+#include "tui.hpp"
 
 using namespace std::chrono_literals;
+using namespace tui::text_literals;
+using namespace tui::text;
+
+using TT = tui::text::Text;
 
 #include "types.hpp"
 #include "crc_32.hpp"
@@ -20,21 +26,11 @@ using Ref = std::shared_ptr<T>;
 
 struct MAC
 {
-    MAC_PARTS parts;
-
-    uint64_t to_bytes() const
-    {
-        uint64_t bytes = 0;
-        for (int i = 0; i < 6; i++)
-        {
-            bytes = bytes << 8;
-            bytes |= parts[i];
-        }
-        return bytes;
-    }
+    uint64_t bytes;
 
     std::string to_string() const
     {
+        auto parts = bytesToParts(bytes);
         std::stringstream ss;
         ss << std::hex << std::setfill('0')
            << std::setw(2) << (uint64_t)parts[0] << ":"
@@ -51,31 +47,45 @@ struct MAC
         std::string m(str);
         std::replace(m.begin(), m.end(), ':', ' ');
         std::stringstream ss(m);
+        MAC_PARTS parts;
         ss >> std::hex >> parts[0] >> parts[1] >> parts[2] >> parts[3] >> parts[4] >> parts[5];
+        this->bytes = partsToBytes(parts);
     }
 
-    MAC(const MAC_PARTS &parts)
+    MAC(const MAC_PARTS &parts) : MAC(partsToBytes(parts))
     {
-        for (int i = 0; i < 6; i++)
-            this->parts[i] = parts[i];
     }
 
     MAC(uint64_t bytes)
+    : bytes(bytes)
+    {   
+    }
+
+    MAC(const MAC &other) : MAC(other.bytes)
     {
+    }
+
+    bool operator==(const MAC &other) const { return bytes == other.bytes; }
+
+    static uint64_t partsToBytes(const MAC_PARTS& parts) {
+        uint64_t bytes = 0;
+        for (int i = 0; i < 6; i++)
+        {
+            bytes = bytes << 8;
+            bytes |= parts[i];
+        }
+        return bytes;
+    }
+
+    static Ref<MAC_PARTS> bytesToParts(uint64_t bytes) {
+        Ref<MAC_PARTS> parts = std::make_shared<MAC_PARTS>(6);
         for (int i = 5; i >= 0; i--)
         {
             parts[i] = bytes & 0xFF;
             bytes >>= 8;
         }
-    }
-
-    MAC(const MAC &other)
-    {
-        memcpy(parts, other.parts, 6 * sizeof(uint16_t));
-    }
-
-
-    bool operator==(const MAC& other) const { return to_bytes() == other.to_bytes(); }
+        return parts;
+    } 
 };
 
 template <>
@@ -83,7 +93,7 @@ struct std::hash<MAC>
 {
     size_t operator()(const MAC &mac) const
     {
-        return std::hash<uint64_t>()(mac.to_bytes());
+        return std::hash<uint64_t>()(mac.bytes);
     }
 };
 
@@ -99,22 +109,25 @@ struct Ether2Frame
     uint32_t CRC;
 
     Ether2Frame(const MAC &dst, const MAC &src, const char *const data, unsigned int data_size)
-        : dst(dst.to_bytes()), src(src.to_bytes())
+        : dst(dst.bytes), src(src.bytes)
     {
         memcpy(this->data, data, data_size);
         CRC = CRC32(data, data_size);
     }
 };
 
-
 class EthernetPeer
 {
 
 protected:
     std::vector<Ref<EthernetPeer>> interfaces;
+    ERROR_CONTROL m_ErrorControlType;
 
 public:
-    EthernetPeer(unsigned port_count) : interfaces(port_count) {}
+    EthernetPeer(ERROR_CONTROL error_control_type, unsigned port_count)
+        : interfaces(port_count), m_ErrorControlType(error_control_type)
+    {
+    }
 
     static void connect(const Ref<EthernetPeer> &A, const Ref<EthernetPeer> &B, unsigned portA, unsigned portB)
     {
@@ -129,13 +142,13 @@ public:
         else if (B->interfaces[portB] != A)
             throw std::runtime_error("In B, portB is already connected to a different peer");
 
-        //TODO: in case A and B are already connected, it will cause a reconnection (is this desirable?)
+        //Raise exception if both error checking methods are not the same
+        if (A->m_ErrorControlType != B->m_ErrorControlType)
+            throw std::runtime_error("Error control type of peers are different");
 
+        //TODO: in case A and B are already connected, it will cause a reconnection (is this desirable?)
         A->interfaces[portA] = B;
         B->interfaces[portB] = A;
-
-        // A->onConnected(portA);
-        // B->onConnected(portB);
     }
 
     static void disconnect(const Ref<EthernetPeer> &A, const Ref<EthernetPeer> &B)
@@ -161,17 +174,12 @@ public:
         B->interfaces[portB] = nullptr;
     }
 
-    virtual void sendFrame(Ether2Frame &frame)
+    virtual void sendFrame(uint16_t interface, Ether2Frame &frame)
     {
-        //Send frame to all ports with a valid peer
-        for (unsigned int i = 0; i < interfaces.size(); i++)
-            if (interfaces[i] != nullptr)
-                interfaces[i]->receiveFrame(this, frame);
+        interfaces[interface]->receiveFrame(this, frame);
     }
 
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) = 0;
-    // virtual void onConnected(unsigned port) = 0;
-    // virtual void onDisconnected(unsigned port) = 0;
     virtual ~EthernetPeer() {}
 };
 
@@ -179,30 +187,42 @@ class Host : public EthernetPeer
 {
 private:
     bool m_PromiscuousMode = false;
+
 public:
     MAC m_MAC;
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
-        std::cout << "CurrentMAC: " << m_MAC.to_string() << std::endl;
-
+        L("");
         //Announce that this host has received the frame
-        std::cout << "Received frame from " << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
-        std::cout << "Frame destination: " << MAC(frame.dst).to_string() << std::endl;
+        L("(Host) Received frame from "_fblu << MAC(frame.src).to_string());
+        L("(Host) Frame destination: "_fblu << MAC(frame.dst).to_string());
 
+        L("(Host) CurrentMAC: "_fblu << m_MAC.to_string());
         //If the destination is not this host, drop the frame and return
-        if (!m_PromiscuousMode && frame.dst != this->m_MAC.to_bytes())
+        if (m_PromiscuousMode)
         {
-            std::cout << "Dropping frame" << std::endl;
+            L("(Host) WARNING: Promiscuous mode enabled!!"_fyel);
+        }
+        else if (frame.dst != this->m_MAC.bytes)
+        {
+            L("The frame was not destinated to this host, dropping it"_fwhi);
             return;
         }
 
-        std::cout << "Accepting frame" << std::endl;
+        L("(Host) Frame accepted!"_fgre);
+        L("(Host) Frame content: "_fgre << TT{(const char *)frame.data}.FWhite().Bold());
     }
 
-    Host(const MAC &mac, unsigned int port_count = 1) : EthernetPeer(port_count), m_MAC(mac) {}
+    inline void setPromiscuousMode(bool promiscuous) { m_PromiscuousMode = promiscuous; }
+
+    Host(const MAC &mac, ERROR_CONTROL error_control_type, unsigned int port_count = 1)
+        : EthernetPeer(error_control_type, port_count), m_MAC(mac)
+    {
+    }
 };
 
-struct SwitchTableEntry {
+struct SwitchTableEntry
+{
     uint16_t interface;
     uint64_t lastUpdate;
 };
@@ -215,13 +235,13 @@ class Switch : public EthernetPeer
 {
 private:
     const uint8_t MAX_TABLE_SIZE = 4;
-    
+
     SwitchTable m_SwitchTable;
 
     void sendToAllExceptSender(uint16_t senderInterface, Ether2Frame &frame)
     {
-        std::cout << "Switch received, repassing" << std::endl
-                  << std::endl;
+        //Announce frame source and destination
+        std::cout << "(SWITCH) Sending frame to all interfaces except "_fblu << senderInterface << std::endl;
 
         //Send frame to all ports with a valid peer
         for (unsigned int i = 0; i < interfaces.size(); i++)
@@ -243,76 +263,111 @@ private:
 public:
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
-        size_t senderInterface = getSenderInterface(sender_ptr);
+        L("");
+        //Announce frame receival
+        std::cout << "(SWITCH) Received frame from "_fblu << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
+        std::cout << "(SWITCH) Frame destination: "_fblu << MAC(frame.dst).to_string() << std::endl;
 
-        //If not connected to sender, throw an exception
-        if (senderInterface < 0)
-            throw std::runtime_error("Switch is not connected to sender");
+        size_t senderInterface = 0;
+        try
+        {
+            senderInterface = getSenderInterface(sender_ptr);
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << e.what() << '\n';
+            return;
+        }
 
         //Get current time in milliseconds
         uint64_t currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        
-        //If sender not in switch table
-        if (m_SwitchTable.find(MAC(frame.src)) == m_SwitchTable.end()) {
-            m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
-        } else {
-            // Check if table entry's TTL has expired
-            if (currentTime - m_SwitchTable[frame.src].lastUpdate > TTL) {
-                m_SwitchTable.erase(frame.src);
-                m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
-            }
-        }
 
-        
+        //TODO: check what should happen if the same MAC is presented in another interface before TTL expires
+        //If sender not in switch table, add it, else update TTL and interface for MAC
+        m_SwitchTable[MAC(frame.src)] = {(uint16_t)senderInterface, currentTime};
+
         auto findIt = m_SwitchTable.find(MAC(frame.dst));
-        //If dest not in table or table is full:
-        if (findIt == m_SwitchTable.end() || m_SwitchTable.size() == MAX_TABLE_SIZE) {
-            sendToAllExceptSender(senderInterface, frame);
-        }
-        else {
-            this->interfaces[findIt->second.interface]->sendFrame(frame);
 
-            if (currentTime - findIt->second.lastUpdate > TTL) {
-                m_SwitchTable.erase(frame.src);
-                m_SwitchTable[MAC(frame.src)] = { (uint16_t)senderInterface, currentTime };
-                sendToAllExceptSender(senderInterface, frame);
-            }
+        //If dest not in table or table is full, just send to all except sender
+        if (findIt == m_SwitchTable.end() || m_SwitchTable.size() == MAX_TABLE_SIZE)
+        {
+            D(L("(SWITCH) Destination not in table, sending to all except sender"_fyel));
+            sendToAllExceptSender(senderInterface, frame);
+            return;
         }
+
+        //If dest TTL expired, remove from switch table and send to all except sender
+        if (currentTime - findIt->second.lastUpdate > TTL)
+        {
+            D(L("(SWITCH) TTL expired, removing from table and sending to all except sender"_fyel));
+            m_SwitchTable.erase(frame.src);
+            m_SwitchTable[MAC(frame.src)] = {(uint16_t)senderInterface, currentTime};
+            sendToAllExceptSender(senderInterface, frame);
+            return;
+        }
+
+        //If it's all ok, just send to destination
+        D(L("(SWITCH) Sending to destination (it was in the switch table)"_fgre));
+
+        sendFrame(findIt->second.interface, frame);
     }
 
-    Switch(unsigned int port_count = 32) : EthernetPeer(port_count) {}
+    Switch(ERROR_CONTROL error_control_type, unsigned int port_count = 32)
+        : EthernetPeer(error_control_type, port_count)
+    {
+    }
 };
 
 int main(int argc, char const *argv[])
 {
-    //Create two computers with a random MAC address
-    Ref<Host> A = std::make_shared<Host>(MAC("00:00:00:00:00:00"));
-    Ref<Host> B = std::make_shared<Host>(MAC("FF:FF:FF:FF:FF:FF"));
+    ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
 
-    //Print A and B MAC addressess in string and byte form
-    std::cout << "A: " << A->m_MAC.to_string() << std::endl;
-    std::cout << "A (bytes): " << A->m_MAC.to_bytes() << std::endl;
-    std::cout << "B: " << B->m_MAC.to_string() << std::endl;
-    std::cout << "B (bytes): " << B->m_MAC.to_bytes() << std::endl;
-    std::cout << std::endl
-              << std::endl;
+    //Create two computers with a random MAC address
+    Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
+    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), test_error_control);
+    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), test_error_control);
+
+    C->setPromiscuousMode(true);
 
     //Create a switch with 2 ports
-    Ref<Switch> S1 = std::make_shared<Switch>(2);
-    Ref<Switch> S2 = std::make_shared<Switch>(2);
+    Ref<Switch> S1 = std::make_shared<Switch>(test_error_control, 2);
+    Ref<Switch> S2 = std::make_shared<Switch>(test_error_control, 3);
 
     //Connect A and B through switches
-    EthernetPeer::connect(A, S1, 0, 0);
-    EthernetPeer::connect(S1, S2, 1, 1);
-    EthernetPeer::connect(B, S2, 0, 0);
+    EthernetPeer::connect(A, S1, 0, 1);
+    EthernetPeer::connect(S1, S2, 0, 0);
+    EthernetPeer::connect(B, S2, 0, 1);
+    EthernetPeer::connect(C, S2, 0, 2);
 
     //TODO: change to a function
 
-    //Create a frame from A to B with the message "Hello World"
-    Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello world!", 13);
+    L("[MAIN] A sends 'Hello' to B"_fmag);
+    {
+        Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello", 6);
+        A->sendFrame(0, frame);
+    }
 
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    L("[MAIN] B sends 'Oh, Hello!' to A"_fmag);
+    {
+        Ether2Frame frame(A->m_MAC, B->m_MAC, "Oh, Hello!", 11);
+        B->sendFrame(0, frame);
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    L("[MAIN] A sends 'BRB' to B"_fmag);
+    {
+        Ether2Frame frame(B->m_MAC, A->m_MAC, "BRB", 4);
+        A->sendFrame(0, frame);
+    }
+    
+    //Wait 20s
+    std::this_thread::sleep_for(std::chrono::seconds(20));
+
+    //Create a frame from A to B with the message "Hello World"
+    Ether2Frame frame(B->m_MAC, A->m_MAC, "I'm back!", 10);
     //Send the frame
-    A->sendFrame(frame);
+    A->sendFrame(0, frame);
 
     return 0;
 }
