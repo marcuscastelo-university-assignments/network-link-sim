@@ -26,21 +26,11 @@ using Ref = std::shared_ptr<T>;
 
 struct MAC
 {
-    MAC_PARTS parts;
-
-    uint64_t to_bytes() const
-    {
-        uint64_t bytes = 0;
-        for (int i = 0; i < 6; i++)
-        {
-            bytes = bytes << 8;
-            bytes |= parts[i];
-        }
-        return bytes;
-    }
+    uint64_t bytes;
 
     std::string to_string() const
     {
+        auto parts = bytesToParts(bytes);
         std::stringstream ss;
         ss << std::hex << std::setfill('0')
            << std::setw(2) << (uint64_t)parts[0] << ":"
@@ -57,30 +47,45 @@ struct MAC
         std::string m(str);
         std::replace(m.begin(), m.end(), ':', ' ');
         std::stringstream ss(m);
+        MAC_PARTS parts;
         ss >> std::hex >> parts[0] >> parts[1] >> parts[2] >> parts[3] >> parts[4] >> parts[5];
+        this->bytes = partsToBytes(parts);
     }
 
-    MAC(const MAC_PARTS &parts)
+    MAC(const MAC_PARTS &parts) : MAC(partsToBytes(parts))
     {
-        for (int i = 0; i < 6; i++)
-            this->parts[i] = parts[i];
     }
 
     MAC(uint64_t bytes)
+    : bytes(bytes)
+    {   
+    }
+
+    MAC(const MAC &other) : MAC(other.bytes)
     {
+    }
+
+    bool operator==(const MAC &other) const { return bytes == other.bytes; }
+
+    static uint64_t partsToBytes(const MAC_PARTS& parts) {
+        uint64_t bytes = 0;
+        for (int i = 0; i < 6; i++)
+        {
+            bytes = bytes << 8;
+            bytes |= parts[i];
+        }
+        return bytes;
+    }
+
+    static Ref<MAC_PARTS> bytesToParts(uint64_t bytes) {
+        Ref<MAC_PARTS> parts = std::make_shared<MAC_PARTS>(6);
         for (int i = 5; i >= 0; i--)
         {
             parts[i] = bytes & 0xFF;
             bytes >>= 8;
         }
-    }
-
-    MAC(const MAC &other)
-    {
-        memcpy(parts, other.parts, 6 * sizeof(uint16_t));
-    }
-
-    bool operator==(const MAC &other) const { return to_bytes() == other.to_bytes(); }
+        return parts;
+    } 
 };
 
 template <>
@@ -88,7 +93,7 @@ struct std::hash<MAC>
 {
     size_t operator()(const MAC &mac) const
     {
-        return std::hash<uint64_t>()(mac.to_bytes());
+        return std::hash<uint64_t>()(mac.bytes);
     }
 };
 
@@ -104,7 +109,7 @@ struct Ether2Frame
     uint32_t CRC;
 
     Ether2Frame(const MAC &dst, const MAC &src, const char *const data, unsigned int data_size)
-        : dst(dst.to_bytes()), src(src.to_bytes())
+        : dst(dst.bytes), src(src.bytes)
     {
         memcpy(this->data, data, data_size);
         CRC = CRC32(data, data_size);
@@ -169,12 +174,9 @@ public:
         B->interfaces[portB] = nullptr;
     }
 
-    virtual void sendFrame(Ether2Frame &frame)
+    virtual void sendFrame(uint16_t interface, Ether2Frame &frame)
     {
-        //Send frame to all ports with a valid peer
-        for (unsigned int i = 0; i < interfaces.size(); i++)
-            if (interfaces[i] != nullptr)
-                interfaces[i]->receiveFrame(this, frame);
+        interfaces[interface]->receiveFrame(this, frame);
     }
 
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) = 0;
@@ -201,7 +203,7 @@ public:
         {
             L("(Host) WARNING: Promiscuous mode enabled!!"_fyel);
         }
-        else if (frame.dst != this->m_MAC.to_bytes())
+        else if (frame.dst != this->m_MAC.bytes)
         {
             L("The frame was not destinated to this host, dropping it"_fwhi);
             return;
@@ -306,7 +308,8 @@ public:
 
         //If it's all ok, just send to destination
         D(L("(SWITCH) Sending to destination (it was in the switch table)"_fgre));
-        this->interfaces[findIt->second.interface]->sendFrame(frame);
+
+        sendFrame(findIt->second.interface, frame);
     }
 
     Switch(ERROR_CONTROL error_control_type, unsigned int port_count = 32)
@@ -341,21 +344,21 @@ int main(int argc, char const *argv[])
     L("[MAIN] A sends 'Hello' to B"_fmag);
     {
         Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello", 6);
-        A->sendFrame(frame);
+        A->sendFrame(0, frame);
     }
-    
+
     std::this_thread::sleep_for(std::chrono::seconds(3));
     L("[MAIN] B sends 'Oh, Hello!' to A"_fmag);
     {
         Ether2Frame frame(A->m_MAC, B->m_MAC, "Oh, Hello!", 11);
-        B->sendFrame(frame);
+        B->sendFrame(0, frame);
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(3));
     L("[MAIN] A sends 'BRB' to B"_fmag);
     {
         Ether2Frame frame(B->m_MAC, A->m_MAC, "BRB", 4);
-        A->sendFrame(frame);
+        A->sendFrame(0, frame);
     }
     
     //Wait 20s
@@ -364,7 +367,7 @@ int main(int argc, char const *argv[])
     //Create a frame from A to B with the message "Hello World"
     Ether2Frame frame(B->m_MAC, A->m_MAC, "I'm back!", 10);
     //Send the frame
-    A->sendFrame(frame);
+    A->sendFrame(0, frame);
 
     return 0;
 }
