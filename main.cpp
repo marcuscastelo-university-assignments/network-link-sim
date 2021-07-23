@@ -57,8 +57,8 @@ struct MAC
     }
 
     MAC(uint64_t bytes)
-    : bytes(bytes)
-    {   
+        : bytes(bytes)
+    {
     }
 
     MAC(const MAC &other) : MAC(other.bytes)
@@ -67,7 +67,8 @@ struct MAC
 
     bool operator==(const MAC &other) const { return bytes == other.bytes; }
 
-    static uint64_t partsToBytes(const MAC_PARTS& parts) {
+    static uint64_t partsToBytes(const MAC_PARTS &parts)
+    {
         uint64_t bytes = 0;
         for (int i = 0; i < 6; i++)
         {
@@ -77,7 +78,8 @@ struct MAC
         return bytes;
     }
 
-    static Ref<MAC_PARTS> bytesToParts(uint64_t bytes) {
+    static Ref<MAC_PARTS> bytesToParts(uint64_t bytes)
+    {
         Ref<MAC_PARTS> parts = std::make_shared<MAC_PARTS>(6);
         for (int i = 5; i >= 0; i--)
         {
@@ -85,7 +87,7 @@ struct MAC
             bytes >>= 8;
         }
         return parts;
-    } 
+    }
 };
 
 template <>
@@ -227,7 +229,7 @@ struct SwitchTableEntry
     uint64_t lastUpdate;
 };
 
-const auto TTL = std::chrono::duration_cast<std::chrono::milliseconds>(10s).count();
+const auto TTL = std::chrono::duration_cast<std::chrono::milliseconds>(15s).count();
 
 using SwitchTable = std::unordered_map<MAC, SwitchTableEntry>;
 
@@ -307,8 +309,13 @@ public:
         }
 
         //If it's all ok, just send to destination
-        D(L("(SWITCH) Sending to destination (it was in the switch table)"_fgre));
 
+        if (findIt->second.interface == senderInterface) {
+            D(L("(SWITCH) The destination of the packet is in the same interface that sent it, dropping!"_fred));
+            return;
+        }
+
+        D(L("(SWITCH) Sending to destination (it was in the switch table)"_fgre));
         sendFrame(findIt->second.interface, frame);
     }
 
@@ -318,56 +325,141 @@ public:
     }
 };
 
-int main(int argc, char const *argv[])
+void A_B_ttl_andPromC()
 {
     ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
 
-    //Create two computers with a random MAC address
     Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
     Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), test_error_control);
     Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), test_error_control);
 
     C->setPromiscuousMode(true);
 
-    //Create a switch with 2 ports
     Ref<Switch> S1 = std::make_shared<Switch>(test_error_control, 2);
     Ref<Switch> S2 = std::make_shared<Switch>(test_error_control, 3);
 
-    //Connect A and B through switches
     EthernetPeer::connect(A, S1, 0, 1);
     EthernetPeer::connect(S1, S2, 0, 0);
     EthernetPeer::connect(B, S2, 0, 1);
     EthernetPeer::connect(C, S2, 0, 2);
 
-    //TODO: change to a function
-
-    L("[MAIN] A sends 'Hello' to B"_fmag);
+    L("\n[MAIN] A sends 'Hello' to B"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
     {
         Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello", 6);
         A->sendFrame(0, frame);
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    L("[MAIN] B sends 'Oh, Hello!' to A"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    L("\n[MAIN] B sends 'Oh, Hello!' to A"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
     {
         Ether2Frame frame(A->m_MAC, B->m_MAC, "Oh, Hello!", 11);
         B->sendFrame(0, frame);
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    L("[MAIN] A sends 'BRB' to B"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    L("\n[MAIN] A sends 'BRB' to B"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
     {
         Ether2Frame frame(B->m_MAC, A->m_MAC, "BRB", 4);
         A->sendFrame(0, frame);
     }
-    
+
     //Wait 20s
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    L("\n[MAIN] After a long time (TTL has expired)"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    L("\n[MAIN] A sends 'I'm Back' to B"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(16));
 
     //Create a frame from A to B with the message "Hello World"
     Ether2Frame frame(B->m_MAC, A->m_MAC, "I'm back!", 10);
     //Send the frame
     A->sendFrame(0, frame);
+}
+
+void B_C_self_andPromA()
+{
+    ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
+
+    Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
+    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), test_error_control);
+    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), test_error_control);
+
+    A->setPromiscuousMode(true);
+
+    Ref<Switch> S1 = std::make_shared<Switch>(test_error_control, 2);
+    Ref<Switch> S2 = std::make_shared<Switch>(test_error_control, 3);
+
+    EthernetPeer::connect(A, S1, 0, 1);
+    EthernetPeer::connect(S1, S2, 0, 0);
+    EthernetPeer::connect(B, S2, 0, 1);
+    EthernetPeer::connect(C, S2, 0, 2);
+
+    L("\n[MAIN] B sends 'Hello' to C"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    {
+        Ether2Frame frame(C->m_MAC, B->m_MAC, "Hello", 6);
+        B->sendFrame(0, frame);
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    L("\n[MAIN] C sends 'Oh, Hello!' to B"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    {
+        Ether2Frame frame(B->m_MAC, C->m_MAC, "Oh, Hello!", 11);
+        C->sendFrame(0, frame);
+    }
+
+    L("\n[MAIN] B sends 'Everything ok?' to C"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    {
+        Ether2Frame frame(C->m_MAC, B->m_MAC, "Everything ok?", 15);
+        B->sendFrame(0, frame);
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    L("\n[MAIN] C sends 'Yeah, pretty much' to itself by mistake"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    {
+        Ether2Frame frame(C->m_MAC, C->m_MAC, "Yeah, pretty much", 18);
+        C->sendFrame(0, frame);
+    }
+}
+
+int main(int argc, char const *argv[])
+{
+    while (true)
+    {
+        tui::clear();
+        tui::printl("Welcome to our data-link layer simulation"_fblu);
+
+        tui::printl("Select a story to run:"_fwhi.Bold());
+        tui::printl("  1. A-B with TTL expiring and promiscuous mode on C"_fgre);
+        tui::printl("  2. C-B with C sending a frame to itself and A in promiscuous mode"_fgre);
+        //TODO: add CRC, EVEN, ODD stories
+        tui::printl("");
+        tui::printl("  q. quit"_fred);
+        auto opt = tui::readline();
+
+        if (opt.size() < 1)
+            continue;
+        switch (opt[0])
+        {
+        case '1':
+            A_B_ttl_andPromC();
+            break;
+        case '2':
+            B_C_self_andPromA();
+            break;
+        case 'q':
+            return 0;
+        }
+
+        tui::printl("End of the story!"_fmag);
+        tui::printl("Press enter to restart..."_fwhi.Bold());
+        tui::readline();
+    }
 
     return 0;
 }
