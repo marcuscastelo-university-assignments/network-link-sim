@@ -106,11 +106,27 @@ public:
         L("(Host) Frame accepted!"_fgre);
         frame.prettyPrint();
 
-        if (!frame.checkCRC())
-        {
-            //TODO: print which bytes are incorrect
-            L("The frame CRC is invalid, dropping it"_fred);
-        }
+		if(this->m_ErrorControlType == ERROR_CONTROL::CRC)
+		{
+			if (!frame.checkCRC())
+			{
+				L("The frame CRC is invalid, dropping it"_fred);
+			}
+		}
+		else if(this->m_ErrorControlType == ERROR_CONTROL::EVEN)
+		{
+			if(!frame.checkEven())
+			{
+				L("The frame parity bit (even) is invalid, dropping it"_fred);
+			}
+		}
+		else
+		{
+			if(!frame.checkEven())
+			{
+				L("The frame parity bit (odd) is invalid, dropping it"_fred);
+			}
+		}
     }
 
     inline void setPromiscuousMode(bool promiscuous) { m_PromiscuousMode = promiscuous; }

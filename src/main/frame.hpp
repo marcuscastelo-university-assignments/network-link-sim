@@ -16,14 +16,25 @@ struct Ether2Frame
 
     //TODO: comentar uso de 1500 bytes (limitado pela linguagem (alternativa é usar a heap, mas perde fidedignidade))
     uint8_t data[1500];
-    uint32_t CRC;
+    uint32_t verifyContent;
 
-    Ether2Frame(const MAC &dst, const MAC &src, const char *const data, size_t data_size)
+    Ether2Frame(const MAC &dst, const MAC &src, const char *const data, size_t data_size, ERROR_CONTROL errorType)
         : dst(dst.bytes), src(src.bytes)
     {
         memset(this->data, '\0', 1500);
         memcpy(this->data, data, data_size);
-        CRC = CRC32(this->data, 1500);
+		if(errorType == ERROR_CONTROL::CRC)
+		{
+        	verifyContent = CRC32(this->data, 1500);
+		}
+		else if(errorType == ERROR_CONTROL::EVEN)
+		{
+			verifyContent = paridadePar((void*)this->data, 1500);
+		}
+		else
+		{
+			verifyContent = paridadeImpar((void*)this->data, 1500);
+		}
     }
 
 public:
@@ -33,7 +44,7 @@ public:
         std::cout << " | src: " << std::hex << std::setfill('0') << std::setw(2) << (uint64_t)src;
         std::cout << " | type: " << std::setw(2) << type;
         std::cout << " | payload: " << data;
-        std::cout << " | crc: " << CRC;
+        std::cout << " | verificador: " << verifyContent;
         std::cout << " ] " << std::endl;
     }
 
@@ -61,6 +72,16 @@ public:
 
     bool checkCRC()
     {
-        return CRC == CRC32(this->data, 1500);
+        return verifyContent == CRC32(this->data, 1500);
     }
+
+	bool checkEven()
+	{
+		return verifyContent == paridadePar((void*)this->data, 1500);
+	}
+
+	bool checkOdd()
+	{
+		return verifyContent == paridadeImpar((void*)this->data, 1500);
+	}
 };

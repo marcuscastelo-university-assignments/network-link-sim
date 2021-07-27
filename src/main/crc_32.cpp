@@ -67,46 +67,35 @@ unsigned int countBits(const void* buf, size_t len){
 	return num_bits;
 }
 
-char* paridadePar (const char* buf, size_t len){
+uint8_t paridadePar (const void* buf, size_t len){
 
 	int num_bits = countBits(buf, len);
-	char *aux = (char*) malloc(sizeof(uint8_t)*len+2);
-	strcpy(aux, (char*) buf);
-
 	//Par
 	if(num_bits%2 == 0)
 	{
-		aux[len] = '0';
+		return (uint8_t) 0;
 	}
 
 	//Impar
 	else
 	{
-		aux[len] = '1';
+		return (uint8_t) 1;
 	}
-	aux[len+1] = '\0';	
-
-	return aux;
 }
 
-char* paridadeImpar(const char* buf, size_t len){
+uint8_t paridadeImpar(const void* buf, size_t len){
 
 	int num_bits = countBits(buf, len);
-	char *aux = (char*) malloc(sizeof(uint8_t)*len+2);
-	strcpy(aux, (char*) buf);
 
 	//Par
 	if(num_bits%2 == 0)
 	{
-		aux[len] = '1';
+		return (uint8_t) 1; 
 	}
 
 	//Impar
 	else
 	{
-		aux[len] = '0';
+		return (uint8_t) 0;
 	}
-	aux[len+1] = '\0';
-
-	return aux;
 }
