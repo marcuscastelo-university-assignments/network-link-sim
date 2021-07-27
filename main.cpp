@@ -11,6 +11,8 @@
 #include <chrono>
 #include <thread>
 #include "tui.hpp"
+#include <cstdlib>
+#include <ctime>
 
 using namespace std::chrono_literals;
 using namespace tui::text_literals;
@@ -113,8 +115,9 @@ struct Ether2Frame
     Ether2Frame(const MAC &dst, const MAC &src, const char *const data, size_t data_size)
         : dst(dst.bytes), src(src.bytes)
     {
+        memset(this->data, 0, 1500);
         memcpy(this->data, data, data_size);
-        CRC = CRC32(this->data, data_size);
+        CRC = CRC32(this->data, 1500);
     }
 
 public:
@@ -126,6 +129,17 @@ public:
         std::cout << " | payload: " << data;
         std::cout << " | crc: " << CRC;
         std::cout << " ] " << std::endl;
+    }
+    
+    //Causes a bit flip on a random bit of the message (limited to the first 10 bytes so that the noise is visible on the examples)
+    void _simulation_fake_noise(float probability = 1, size_t randomize_below = 10) {
+        if (rand() % 100 <= probability * 100) {
+            data[rand() % randomize_below] ^= 0b00000001 << ( rand() % 8);
+        }
+    }
+
+    bool checkCRC() {
+        return CRC == CRC32(this->data, 1500);
     }
 };
 
