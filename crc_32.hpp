@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstring>
 
 using namespace std;
 
@@ -6,6 +7,9 @@ typedef uint32_t crc;
 
 #define mensagem (const uint8_t*) "aaaaaaaaaaaaaaaa"
 #define mensagem2 (const uint8_t*) "aaaaaaaaaaaaaaab"
+
+
+/****************************************** CRC-32 ****************************************/
 
 /**
  * Para um dado valor de entrada e um polinômio gerador,
@@ -42,13 +46,63 @@ uint32_t update(uint32_t (&table)[256], uint32_t initial, const void* buf, size_
 	return c ^ 0xFFFFFFFF;
 }
 
-int CRC32(const char* data, unsigned int size) {
-    // TODO: assert size condiz com CRC32 (mensagem + ? bits)
+/**************************************************** Paridade **********************************/
 
-    // constexpr unsigned int polynomial = 0b00000100110000010001110110110111;
-    //TODO: padding right (size - 1)
-    //TODO: xor com data
-    
-    //Return resto para colocar no quadro como checksum.
-    return 0;
+unsigned int countBits(const void* buf, size_t len){
+	unsigned int num_bits = 0;
+	const uint8_t* message = static_cast<const uint8_t*> (buf);
+	for(unsigned int i = 0; i < len; i++){
+		
+		int value = message[i];
+		while(value != 0){
+			num_bits += value%2;
+			value /= 2;
+		}
+	}
+
+	return num_bits;
+}
+
+char* paridadePar (const char* buf, size_t len){
+
+	int num_bits = countBits(buf, len);
+	char *aux = (char*) malloc(sizeof(uint8_t)*len+2);
+	strcpy(aux, (char*)mensagem);
+
+	//Par
+	if(num_bits%2 == 0)
+	{
+		aux[len] = '0';
+	}
+
+	//Impar
+	else
+	{
+		aux[len] = '1';
+	}
+	aux[len+1] = '\0';	
+
+	return aux;
+}
+
+char* paridadeImpar(const char* buf, size_t len){
+
+	int num_bits = countBits(buf, len);
+	char *aux = (char*) malloc(sizeof(uint8_t)*len+2);
+	strcpy(aux, (char*)mensagem);
+
+	//Par
+	if(num_bits%2 == 0)
+	{
+		aux[len] = '1';
+	}
+
+	//Impar
+	else
+	{
+		aux[len] = '0';
+	}
+	aux[len+1] = '\0';
+
+	return aux;
 }
