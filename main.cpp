@@ -110,11 +110,22 @@ struct Ether2Frame
     uint8_t data[1500];
     uint32_t CRC;
 
-    Ether2Frame(const MAC &dst, const MAC &src, const char *const data, unsigned int data_size)
+    Ether2Frame(const MAC &dst, const MAC &src, const char *const data, size_t data_size)
         : dst(dst.bytes), src(src.bytes)
     {
         memcpy(this->data, data, data_size);
-        CRC = CRC32(data, data_size);
+        CRC = CRC32(this->data, data_size);
+    }
+
+public:
+    void prettyPrint()
+    {
+        std::cout << " [ dst: " << std::hex << std::setfill('0') << std::setw(2) << (uint64_t)dst;
+        std::cout << " | src: " << std::hex << std::setfill('0') << std::setw(2) << (uint64_t)src;
+        std::cout << " | type: " << std::setw(2) << type;
+        std::cout << " | payload: " << data;
+        std::cout << " | crc: " << CRC;
+        std::cout << " ] " << std::endl;
     }
 };
 
@@ -212,7 +223,8 @@ public:
         }
 
         L("(Host) Frame accepted!"_fgre);
-        L("(Host) Frame content: "_fgre << TT{(const char *)frame.data}.FWhite().Bold());
+        frame.prettyPrint();
+        // L("(Host) Frame content: "_fgre << TT{(const char *)frame.data}.FWhite().Bold());
     }
 
     inline void setPromiscuousMode(bool promiscuous) { m_PromiscuousMode = promiscuous; }
@@ -310,7 +322,8 @@ public:
 
         //If it's all ok, just send to destination
 
-        if (findIt->second.interface == senderInterface) {
+        if (findIt->second.interface == senderInterface)
+        {
             D(L("(SWITCH) The destination of the packet is in the same interface that sent it, dropping!"_fred));
             return;
         }
@@ -463,4 +476,3 @@ int main(int argc, char const *argv[])
 
     return 0;
 }
-
