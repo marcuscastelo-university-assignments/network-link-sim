@@ -52,15 +52,3 @@ int CRC32(const char* data, unsigned int size) {
     //Return resto para colocar no quadro como checksum.
     return 0;
 }
-
-int main(){
-
-	uint32_t table[256];
-	generate_table(table);
-
-	uint32_t crc = update(table, 0, mensagem, 16);
-
-	cout << crc << endl;
-
-	return 0;
-}
