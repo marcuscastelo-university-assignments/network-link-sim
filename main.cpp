@@ -115,7 +115,7 @@ struct Ether2Frame
     Ether2Frame(const MAC &dst, const MAC &src, const char *const data, size_t data_size)
         : dst(dst.bytes), src(src.bytes)
     {
-        memset(this->data, 0, 1500);
+        memset(this->data, '\0', 1500);
         memcpy(this->data, data, data_size);
         CRC = CRC32(this->data, 1500);
     }
@@ -130,15 +130,31 @@ public:
         std::cout << " | crc: " << CRC;
         std::cout << " ] " << std::endl;
     }
-    
-    //Causes a bit flip on a random bit of the message (limited to the first 10 bytes so that the noise is visible on the examples)
-    void _simulation_fake_noise(float probability = 1, size_t randomize_below = 10) {
-        if (rand() % 100 <= probability * 100) {
-            data[rand() % randomize_below] ^= 0b00000001 << ( rand() % 8);
+
+    //Causes a bit flip on a random bit of the message (limited to strlen so that)
+    void _simulation_fake_noise(float probability = 0.1, size_t randomize_below = -1)
+    {
+        if (randomize_below == (size_t)-1)
+            randomize_below = strlen((const char *)data);
+
+        if (rand() % 100 <= probability * 100)
+        {
+            size_t byteToRandomize = rand() % randomize_below;
+            size_t bitToRandomize = rand() % 8;
+            std::cout << std::endl;
+            std::cout << "*** Simulating ERROR!!! *** "_fred << std::endl;
+            std::cout << "  Flipping bit "_fred << bitToRandomize << " of byte "_fred << byteToRandomize << std::endl;
+            std::cout << "  Data before: "_fblu << data << std::endl;
+            data[byteToRandomize] ^= 0b00000001 << (bitToRandomize);
+            std::cout << "  Data after: "_fblu << data << std::endl;
+            std::cout << "*** Simulated error *** "_fred << std::endl;
+
+            std::cout << std::endl;
         }
     }
 
-    bool checkCRC() {
+    bool checkCRC()
+    {
         return CRC == CRC32(this->data, 1500);
     }
 };
@@ -220,6 +236,8 @@ public:
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
         L("");
+        frame._simulation_fake_noise();
+
         //Announce that this host has received the frame
         L("(Host) Received frame from "_fblu << MAC(frame.src).to_string());
         L("(Host) Frame destination: "_fblu << MAC(frame.dst).to_string());
@@ -238,7 +256,12 @@ public:
 
         L("(Host) Frame accepted!"_fgre);
         frame.prettyPrint();
-        // L("(Host) Frame content: "_fgre << TT{(const char *)frame.data}.FWhite().Bold());
+
+        if (!frame.checkCRC())
+        {
+            //TODO: print which bytes are incorrect
+            L("The frame CRC is invalid, dropping it"_fred);
+        }
     }
 
     inline void setPromiscuousMode(bool promiscuous) { m_PromiscuousMode = promiscuous; }
@@ -291,6 +314,8 @@ private:
 public:
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
+        frame._simulation_fake_noise();
+
         L("");
         //Announce frame receival
         std::cout << "(SWITCH) Received frame from "_fblu << MAC(frame.src).to_string() << ": " << frame.data << std::endl;
@@ -454,6 +479,32 @@ void B_C_self_andPromA()
     }
 }
 
+void B_C_errorCRC()
+{
+    ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
+
+    // Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
+    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), test_error_control);
+    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), test_error_control);
+
+    // A->setPromiscuousMode(true);
+
+    // Ref<Switch> S1 = std::make_shared<Switch>(test_error_control, 2);
+    Ref<Switch> S2 = std::make_shared<Switch>(test_error_control, 3);
+
+    // EthernetPeer::connect(A, S1, 0, 1);
+    // EthernetPeer::connect(S1, S2, 0, 0);
+    EthernetPeer::connect(B, S2, 0, 1);
+    EthernetPeer::connect(C, S2, 0, 2);
+
+    L("\n[MAIN] B sends 'Hello' to C"_fmag);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    {
+        Ether2Frame frame(C->m_MAC, B->m_MAC, "Hello", 6);
+        B->sendFrame(0, frame);
+    }
+}
+
 int main(int argc, char const *argv[])
 {
     while (true)
@@ -462,8 +513,9 @@ int main(int argc, char const *argv[])
         tui::printl("Welcome to our data-link layer simulation"_fblu);
 
         tui::printl("Select a story to run:"_fwhi.Bold());
-        tui::printl("  1. A-B with TTL expiring and promiscuous mode on C"_fgre);
-        tui::printl("  2. C-B with C sending a frame to itself and A in promiscuous mode"_fgre);
+        tui::printl("  1. (CRC): A-B (S1, S2)  with TTL expiring and promiscuous mode on C"_fgre);
+        tui::printl("  2. (CRC): B-C (S1, S2)  with C sending a frame to itself and A in promiscuous mode"_fgre);
+        tui::printl("  3. (CRC): B-C (S2 only) with bit flipping (tranmission interference)"_fgre);
         //TODO: add CRC, EVEN, ODD stories
         tui::printl("");
         tui::printl("  q. quit"_fred);
@@ -474,12 +526,20 @@ int main(int argc, char const *argv[])
         switch (opt[0])
         {
         case '1':
+            srand(1);
             A_B_ttl_andPromC();
             break;
         case '2':
+            srand(1);
             B_C_self_andPromA();
             break;
-        case 'q':
+        case '3':
+            srand(10);
+            B_C_errorCRC();
+            break;
+        case ''
+
+            case 'q':
             return 0;
         }
 
