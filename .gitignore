@@ -31,6 +31,7 @@
 *.out
 *.app
 
-# binaries
-tests
-main
+# binaries, objs, deps
+bin/
+deps/
+objs/

@@ -1,3 +1,5 @@
+#pragma once
+
 #define __nezumi_debugger_on__ 1
 #define D(x) { if (__nezumi_debugger_on__) { x } }
 #define L(x) { std::cout << x << std::endl; }
@@ -17,3 +19,6 @@ enum class ERROR_CONTROL {
     ODD,
     CRC
 };
+
+template <typename T>
+using Ref = std::shared_ptr<T>;
