@@ -1,3 +1,6 @@
+/**
+ * Header auxiliar para definição de tipos criados e usados no trabalho
+ */
 #pragma once
 
 #define __nezumi_debugger_on__ 1

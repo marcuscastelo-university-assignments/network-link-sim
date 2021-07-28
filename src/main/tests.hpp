@@ -1,3 +1,6 @@
+/**
+ * Header auxiliar para testes de envio de frames entre os computadores
+ */
 #pragma once
 
 #include "types.hpp"
@@ -5,6 +8,9 @@
 #include "peers.hpp"
 #include <memory>
 
+/**
+ * Método que simula conexão de computadores A, B e C em um mesmo switch
+ */
 void A_B_ttl_andPromC()
 {
     ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
@@ -58,6 +64,9 @@ void A_B_ttl_andPromC()
     A->sendFrame(0, frame);
 }
 
+/**
+ * Método que simula conexão de 3 computadores A, B e C conectados em um mesmo switch
+ */
 void B_C_self_andPromA()
 {
     ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
@@ -107,6 +116,9 @@ void B_C_self_andPromA()
     }
 }
 
+/**
+ * Método que simula um erro na transmissão de um frame do computador B para o C, simulando erro
+ */
 void B_C_error(ERROR_CONTROL test_error_control)
 {
     // Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
