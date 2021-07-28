@@ -1,3 +1,6 @@
+/**
+ * Arquivo main, contendo inicialização e chamada das funções e métodos implmentados
+ */
 #include <string>
 #include <sstream>
 #include <iomanip>
@@ -10,9 +13,10 @@
 #include <unistd.h>
 #include <chrono>
 #include <thread>
-#include "tui.hpp"
 #include <cstdlib>
 #include <ctime>
+
+#include "tui.hpp"
 #include "tests.hpp"
 
 using namespace std::chrono_literals;

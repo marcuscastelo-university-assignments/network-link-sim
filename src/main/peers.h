@@ -1,10 +1,14 @@
-#include "types.hpp"
+/**
+ * Header criado para auxiliar no fluxo da rede, transmitindo os frames
+ */
 #include <vector>
 #include <stdexcept>
-#include "mac.hpp"
-#include "frame.hpp"
 #include <unordered_map>
 #include <chrono>
+
+#include "frame.hpp"
+#include "types.hpp"
+#include "mac.hpp"
 
 using namespace std::chrono_literals;
 
@@ -21,6 +25,16 @@ public:
     {
     }
 
+	/**
+	 * Método auxiliar que simula a conexão entre 2 computadores, utilizando suas portas
+	 * 
+	 * Parâmetros:	const Ref<EthernetPeer> &A	=>	Computador A
+	 * 				const Ref<EthernetPeer> &B	=>	Computador B
+	 * 				unsigned portA				=>	Porta do computador A
+	 * 				unsigned portA				=>	Porta do computador B
+	 * 
+	 * Retorno: void
+	 */
     static void connect(const Ref<EthernetPeer> &A, const Ref<EthernetPeer> &B, unsigned portA, unsigned portB)
     {
         //Check if port already has a valid pointer
@@ -43,6 +57,14 @@ public:
         B->interfaces[portB] = A;
     }
 
+	/**
+	 * Método auxiliar que simula a desconexão entre dois computadores
+	 * 
+	 * Parâmetros:	const Ref<EthernetPeer> &A	=>	Computador A
+	 * 				const Ref<EthernetPeer> &B	=>	Computador B
+	 * 
+	 * Retorno: void
+	 */
     static void disconnect(const Ref<EthernetPeer> &A, const Ref<EthernetPeer> &B)
     {
         //Get in which port B is connected
@@ -66,11 +88,17 @@ public:
         B->interfaces[portB] = nullptr;
     }
 
+	/**
+	 * Método que simula o envio de um frame pela interface
+	 */
     virtual void sendFrame(uint16_t interface, Ether2Frame &frame)
     {
         interfaces[interface]->receiveFrame(this, frame);
     }
 
+	/**
+	 * Método que simula o recebimento de uma frame pela interface
+	 */
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) = 0;
     virtual ~EthernetPeer() {}
 };
@@ -82,6 +110,10 @@ private:
 
 public:
     MAC m_MAC;
+
+	/**
+	 * Método que simula o envio de um frame pela interface
+	 */
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
         L("");
@@ -154,6 +186,9 @@ private:
 
     SwitchTable m_SwitchTable;
 
+	/**
+	 * Método que simula o envio de um frame a todos as interfaces conectadas
+	 */
     void sendToAllExceptSender(uint16_t senderInterface, Ether2Frame &frame)
     {
         //Announce frame source and destination
@@ -165,6 +200,9 @@ private:
                 interfaces[i]->receiveFrame(this, frame);
     }
 
+	/**
+	 * Método devolve a interface do remetente
+	 */
     size_t getSenderInterface(const EthernetPeer *const sender_ptr)
     {
         //Gets the port index which matches with sender_ptr
@@ -177,6 +215,9 @@ private:
     }
 
 public:
+	/**
+	 * Método que simula o envio de um frame pela interface
+	 */
     virtual void receiveFrame(const EthernetPeer *const sender_ptr, Ether2Frame &frame) override
     {
         frame._simulation_fake_noise();
