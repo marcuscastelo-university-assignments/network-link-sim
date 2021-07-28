@@ -1,6 +1,9 @@
 # Ensures all is the default
 all: main
 
+run: main
+	./bin/main
+
 # Compiler alternatives, options and flags
 LD_FLAGS := -pthread -I./src/main
 DEBUG_FLAGS := -O0 -ggdb
@@ -12,7 +15,7 @@ CXX_FLAGS := $(WARNING_FLAGS) $(DEBUG_FLAGS) $(LD_FLAGS)
 
 # Binaries and it's dependencies
 RULES := main
-OBJS := ./main/main.o ./main/tui.o ./main/crc_32.o 
+OBJS := main/main.o main/tui.o main/crc_32.o main/frame.o main/mac.o main/peers.o main/tests.o
 #
 
 # Project structure

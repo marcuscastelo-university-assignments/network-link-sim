@@ -17,7 +17,6 @@
 #include <ctime>
 
 #include "tui.hpp"
-#include "tests.hpp"
 
 using namespace std::chrono_literals;
 using namespace tui::text_literals;
@@ -27,6 +26,8 @@ using TT = tui::text::Text;
 
 #include "types.hpp"
 #include "crc_32.hpp"
+#include "tests.hpp"
+#include "peers.hpp"
 
 void interactive(ERROR_CONTROL errorControl)
 {
