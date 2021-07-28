@@ -32,9 +32,9 @@ void interactive(ERROR_CONTROL errorControl)
 {
     srand(time(NULL));
 
-    static const char *error_names[] = {"Even bits", "Odd bits", "CRC"};
+    static const TT error_names[] = {"Even bits"_b, "Odd bits"_b, "CRC"_b};
     tui::clear();
-    tui::printl("Interactive Session:");
+    tui::printl("Interactive Session:"_fgre);
     tui::printl("All peers will be created using "_t + error_names[(int)errorControl]);
 
     Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), errorControl);
@@ -48,14 +48,15 @@ void interactive(ERROR_CONTROL errorControl)
     std::string msg;
     do
     {
-        tui::print("Type a message to be sent from B to C (or 'q' to quit): "_fblu);
+        tui::print("Type a message to be sent from B to C (or 'q' to quit): "_fwhi.Bold());
         msg = tui::readline();
         Ether2Frame frame(C->m_MAC, B->m_MAC, msg.c_str(), msg.size() + 1, errorControl);
         B->sendFrame(0, frame);
 
+        tui::printl();
         tui::printl("Press enter to clear the screen...");
         tui::readline();
-        tui::printl();
+        tui::clear();
     } while (msg != "q");
 }
 

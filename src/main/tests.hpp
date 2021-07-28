@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-#include "peers.h"
+#include "peers.hpp"
 #include <memory>
 
 void A_B_ttl_andPromC()

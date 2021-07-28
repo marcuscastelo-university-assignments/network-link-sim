@@ -154,7 +154,7 @@ public:
 		}
 		else
 		{
-			if(!frame.checkEven())
+			if(!frame.checkOdd())
 			{
 				L("The frame parity bit (odd) is invalid, dropping it"_fred);
 			}
