@@ -1,6 +1,5 @@
 # Ensures all is the default
-all:
-	@echo "Please specify which project you want to build (client/server)"
+all: main
 
 # Compiler alternatives, options and flags
 LD_FLAGS := -pthread -I./src/main
