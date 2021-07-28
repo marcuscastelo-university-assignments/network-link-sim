@@ -24,6 +24,37 @@ using TT = tui::text::Text;
 #include "types.hpp"
 #include "crc_32.hpp"
 
+void interactive(ERROR_CONTROL errorControl)
+{
+    srand(time(NULL));
+
+    static const char *error_names[] = {"Even bits", "Odd bits", "CRC"};
+    tui::clear();
+    tui::printl("Interactive Session:");
+    tui::printl("All peers will be created using "_t + error_names[(int)errorControl]);
+
+    Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), errorControl);
+    Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), errorControl);
+
+    Ref<Switch> S2 = std::make_shared<Switch>(errorControl, 3);
+
+    EthernetPeer::connect(B, S2, 0, 1);
+    EthernetPeer::connect(C, S2, 0, 2);
+
+    std::string msg;
+    do
+    {
+        tui::print("Type a message to be sent from B to C (or 'q' to quit): "_fblu);
+        msg = tui::readline();
+        Ether2Frame frame(C->m_MAC, B->m_MAC, msg.c_str(), msg.size() + 1, errorControl);
+        B->sendFrame(0, frame);
+
+        tui::printl("Press enter to clear the screen...");
+        tui::readline();
+        tui::printl();
+    } while (msg != "q");
+}
+
 int main(int argc, char const *argv[])
 {
     while (true)
@@ -32,10 +63,16 @@ int main(int argc, char const *argv[])
         tui::printl("Welcome to our data-link layer simulation"_fblu);
 
         tui::printl("Select a story to run:"_fwhi.Bold());
-        tui::printl("  1. (CRC): A-B (S1, S2)  with TTL expiring and promiscuous mode on C"_fgre);
-        tui::printl("  2. (CRC): B-C (S1, S2)  with C sending a frame to itself and A in promiscuous mode"_fgre);
-        tui::printl("  3. (CRC): B-C (S2 only) with bit flipping (tranmission interference)"_fgre);
-        //TODO: add CRC, EVEN, ODD stories
+        tui::printl("  1. (CRC):  A-B (S1, S2)  with TTL expiring and promiscuous mode on C"_fgre);
+        tui::printl("  2. (CRC):  B-C (S1, S2)  with C sending a frame to itself and A in promiscuous mode"_fgre);
+        tui::printl("  3. (CRC):  B-C (S2 only) with bit flipping (tranmission interference)"_fgre);
+        tui::printl("  4. (EVEN): B-C (S2 only) with bit flipping (tranmission interference)"_fgre);
+        tui::printl("  5. (ODD):  B-C (S2 only) with bit flipping (tranmission interference)"_fgre);
+        tui::printl(""_fgre);
+        tui::printl("  7. (CRC):  Interactive with 10% chance of bit flipping"_fgre);
+        tui::printl("  8. (EVEN): Interactive with 10% chance of bit flipping"_fgre);
+        tui::printl("  9. (ODD):  Interactive with 10% chance of bit flipping"_fgre);
+
         tui::printl("");
         tui::printl("  q. quit"_fred);
         auto opt = tui::readline();
@@ -54,9 +91,25 @@ int main(int argc, char const *argv[])
             break;
         case '3':
             srand(10);
-            B_C_errorCRC();
+            B_C_error(ERROR_CONTROL::CRC);
             break;
-            // case ''
+        case '4':
+            srand(10);
+            B_C_error(ERROR_CONTROL::EVEN);
+            break;
+        case '5':
+            srand(10);
+            B_C_error(ERROR_CONTROL::EVEN);
+            break;
+        case '7':
+            interactive(ERROR_CONTROL::CRC);
+            break;
+        case '8':
+            interactive(ERROR_CONTROL::EVEN);
+            break;
+        case '9':
+            interactive(ERROR_CONTROL::ODD);
+            break;
 
         case 'q':
             return 0;

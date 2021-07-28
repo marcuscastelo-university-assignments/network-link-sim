@@ -26,7 +26,7 @@ void A_B_ttl_andPromC()
     L("\n[MAIN] A sends 'Hello' to B"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello", 6);
+        Ether2Frame frame(B->m_MAC, A->m_MAC, "Hello", 6, test_error_control);
         A->sendFrame(0, frame);
     }
 
@@ -34,7 +34,7 @@ void A_B_ttl_andPromC()
     L("\n[MAIN] B sends 'Oh, Hello!' to A"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(A->m_MAC, B->m_MAC, "Oh, Hello!", 11);
+        Ether2Frame frame(A->m_MAC, B->m_MAC, "Oh, Hello!", 11, test_error_control);
         B->sendFrame(0, frame);
     }
 
@@ -42,7 +42,7 @@ void A_B_ttl_andPromC()
     L("\n[MAIN] A sends 'BRB' to B"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(B->m_MAC, A->m_MAC, "BRB", 4);
+        Ether2Frame frame(B->m_MAC, A->m_MAC, "BRB", 4, test_error_control);
         A->sendFrame(0, frame);
     }
 
@@ -53,7 +53,7 @@ void A_B_ttl_andPromC()
     std::this_thread::sleep_for(std::chrono::seconds(16));
 
     //Create a frame from A to B with the message "Hello World"
-    Ether2Frame frame(B->m_MAC, A->m_MAC, "I'm back!", 10);
+    Ether2Frame frame(B->m_MAC, A->m_MAC, "I'm back!", 10, test_error_control);
     //Send the frame
     A->sendFrame(0, frame);
 }
@@ -79,7 +79,7 @@ void B_C_self_andPromA()
     L("\n[MAIN] B sends 'Hello' to C"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(C->m_MAC, B->m_MAC, "Hello", 6);
+        Ether2Frame frame(C->m_MAC, B->m_MAC, "Hello", 6, test_error_control);
         B->sendFrame(0, frame);
     }
 
@@ -87,14 +87,14 @@ void B_C_self_andPromA()
     L("\n[MAIN] C sends 'Oh, Hello!' to B"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(B->m_MAC, C->m_MAC, "Oh, Hello!", 11);
+        Ether2Frame frame(B->m_MAC, C->m_MAC, "Oh, Hello!", 11, test_error_control);
         C->sendFrame(0, frame);
     }
 
     L("\n[MAIN] B sends 'Everything ok?' to C"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(C->m_MAC, B->m_MAC, "Everything ok?", 15);
+        Ether2Frame frame(C->m_MAC, B->m_MAC, "Everything ok?", 15, test_error_control);
         B->sendFrame(0, frame);
     }
 
@@ -102,15 +102,13 @@ void B_C_self_andPromA()
     L("\n[MAIN] C sends 'Yeah, pretty much' to itself by mistake"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(C->m_MAC, C->m_MAC, "Yeah, pretty much", 18);
+        Ether2Frame frame(C->m_MAC, C->m_MAC, "Yeah, pretty much", 18, test_error_control);
         C->sendFrame(0, frame);
     }
 }
 
-void B_C_errorCRC()
+void B_C_error(ERROR_CONTROL test_error_control)
 {
-    ERROR_CONTROL test_error_control = ERROR_CONTROL::CRC;
-
     // Ref<Host> A = std::make_shared<Host>(MAC("AA:AA:AA:AA:AA:AA"), test_error_control);
     Ref<Host> B = std::make_shared<Host>(MAC("BB:BB:BB:BB:BB:BB"), test_error_control);
     Ref<Host> C = std::make_shared<Host>(MAC("CC:CC:CC:CC:CC:CC"), test_error_control);
@@ -128,7 +126,7 @@ void B_C_errorCRC()
     L("\n[MAIN] B sends 'Hello' to C"_fmag);
     std::this_thread::sleep_for(std::chrono::seconds(5));
     {
-        Ether2Frame frame(C->m_MAC, B->m_MAC, "Hello", 6);
+        Ether2Frame frame(C->m_MAC, B->m_MAC, "Hello", 6, test_error_control);
         B->sendFrame(0, frame);
     }
 }
