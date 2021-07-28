@@ -1,16 +1,21 @@
+/**
+ * Header criado para simular o endereço MAC de uma máquina
+ */
 #pragma once
 
-#include "types.hpp"
 #include <stdint.h>
 #include <string>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 
+#include "types.hpp"
+
 struct MAC
 {
     uint64_t bytes;
 
+	//Transforma o endereço MAC em uma string
     std::string to_string() const
     {
         auto parts = bytesToParts(bytes);
@@ -25,6 +30,7 @@ struct MAC
         return ss.str();
     }
 
+	//A partir da string fornecida, cria um MAC
     MAC(const std::string &str)
     {
         std::string m(str);
@@ -50,6 +56,7 @@ struct MAC
 
     bool operator==(const MAC &other) const { return bytes == other.bytes; }
 
+	//Tranformas suas partes em bytes, facilitando comparação
     static uint64_t partsToBytes(const MAC_PARTS &parts)
     {
         uint64_t bytes = 0;
@@ -61,6 +68,7 @@ struct MAC
         return bytes;
     }
 
+	//Tranforma seus bytes em partes, facilitando tratamento
     static Ref<MAC_PARTS> bytesToParts(uint64_t bytes)
     {
         Ref<MAC_PARTS> parts = std::make_shared<MAC_PARTS>(6);
@@ -76,6 +84,7 @@ struct MAC
 template <>
 struct std::hash<MAC>
 {
+	//Retorna um hash para o MAC
     size_t operator()(const MAC &mac) const
     {
         return std::hash<uint64_t>()(mac.bytes);

@@ -1,7 +1,11 @@
+/**
+ * Header criado para auxiliar na abstração do funcionamento de um frame na rede
+ */
 #include <iostream>
 #include <stdint.h>
-#include "mac.hpp"
 #include <string.h>
+
+#include "mac.hpp"
 #include "crc_32.hpp"
 #include "tui.hpp"
 
@@ -18,6 +22,9 @@ struct Ether2Frame
     uint8_t data[1500];
     uint32_t verifyContent;
 
+	/**
+	 * Construtor da classe Ether2Frame, já settando o tipo de checagem a ser feita (CRC, paridade par, paridade ímpar)
+	 */
     Ether2Frame(const MAC &dst, const MAC &src, const char *const data, size_t data_size, ERROR_CONTROL errorType)
         : dst(dst.bytes), src(src.bytes)
     {
@@ -38,6 +45,9 @@ struct Ether2Frame
     }
 
 public:
+	/**
+	 * Método auxiliar para imprimir na tela dados do frame
+	 */
     void prettyPrint()
     {
         std::cout << " [ dst: " << std::hex << std::setfill('0') << std::setw(2) << (uint64_t)dst;
@@ -48,7 +58,14 @@ public:
         std::cout << " ] " << std::endl;
     }
 
-    //Causes a bit flip on a random bit of the message (limited to strlen so that)
+	/**
+	 * Método que simula um ruído na transmissão do frame, ocasionando na alteração do valor de um bit aleatório
+	 * 
+	 * Parâmetros: float probability		=>	Probabilidade da alteração ocorrer
+	 * 				size_t randomize_below	=>	Valor máximo da posição para se alterar um bit (para efeitos de visualização)
+	 * 
+	 * Retorno: void
+	 */
     void _simulation_fake_noise(float probability = 0.1, size_t randomize_below = -1)
     {
         if (randomize_below == (size_t)-1)
@@ -70,16 +87,40 @@ public:
         }
     }
 
+	/**
+	 * Método de checagem se a verificação do CRC corresponde com o esperado
+	 * 
+	 * Parâmetros: void
+	 * 
+	 * Return: bool	=>	true - conteúdo íntegro
+	 * 					false - conteúdo alterado
+	 */
     bool checkCRC()
     {
         return verifyContent == CRC32(this->data, 1500);
     }
 
+	/**
+	 * Método de checagem se a verificação do bit de paridade par corresponde com o esperado
+	 * 
+	 * Parâmetros: void
+	 * 
+	 * Return: bool	=>	true - conteúdo íntegro
+	 * 					false - conteúdo alterado
+	 */
 	bool checkEven()
 	{
 		return verifyContent == paridadePar((void*)this->data, 1500);
 	}
 
+	/**
+	 * Método de checagem se a verificação do bit de paridade ímpar corresponde com o esperado
+	 * 
+	 * Parâmetros: void
+	 * 
+	 * Return: bool	=>	true - conteúdo íntegro
+	 * 					false - conteúdo alterado
+	 */
 	bool checkOdd()
 	{
 		return verifyContent == paridadeImpar((void*)this->data, 1500);
