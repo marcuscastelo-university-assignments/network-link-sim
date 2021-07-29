@@ -19,7 +19,7 @@ Ether2Frame::Ether2Frame(
     : dst(dst.bytes),
       src(src.bytes)
 {
-    if (data_size > 1500) data_size = 1500;
+    if (data_size > 1499) data_size = 1499;
     memset(this->data, '\0', 1500);
     memcpy(this->data, data, data_size);
     if (errorType == ERROR_CONTROL::CRC)
