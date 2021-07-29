@@ -47,10 +47,15 @@ void interactive(ERROR_CONTROL errorControl)
     EthernetPeer::connect(C, S2, 0, 2);
 
     std::string msg;
-    do
+    while(true)
     {
         tui::print("Type a message to be sent from B to C (or 'q' to quit): "_fwhi.Bold());
         msg = tui::readline();
+
+		if(msg == "q")
+		{
+			break;
+		}
         Ether2Frame frame(C->m_MAC, B->m_MAC, msg.c_str(), msg.size() + 1, errorControl);
         B->sendFrame(0, frame);
 
@@ -58,7 +63,7 @@ void interactive(ERROR_CONTROL errorControl)
         tui::printl("Press enter to clear the screen...");
         tui::readline();
         tui::clear();
-    } while (msg != "q");
+    }
 }
 
 int main(int argc, char const *argv[])
